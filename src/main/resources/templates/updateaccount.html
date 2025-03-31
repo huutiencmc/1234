@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cập nhật tài khoản</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    const Status = {
+      SUCCESS: "success",
+      FAIL: "fail",
+      EXCEPTION_FAIL: "fail"
+    };
+
+    async function fetchUserData(username) {
+      try {
+        const response = await fetch(`/api/v1/users/getUserByUsername/${username}`);
+        const user = await response.json();
+
+        if (user) {
+          document.getElementById('username').value = user.username;
+          document.getElementById('email').value = user.email;
+          document.getElementById('employee_name').value = user.employee_name || "Không xác định"; // Sửa lỗi hiển thị tên nhân viên
+          document.getElementById('role').value = user.role_name;
+          document.getElementById('active').checked = user.status === 'Active';
+
+          // Nếu đơn vị là null thì hiển thị "Không xác định"
+          const departmentSelect = document.getElementById('department');
+          const existingOption = document.createElement("option");
+          existingOption.value = user.department_name || "";
+          existingOption.textContent = user.department_name || "Không xác định";
+          existingOption.selected = true;
+          departmentSelect.appendChild(existingOption);
+
+          // Chặn sửa username & email
+          document.getElementById('username').setAttribute('readonly', true);
+          document.getElementById('email').setAttribute('readonly', true);
+
+          // Style input readonly
+          document.getElementById('username').classList.add('bg-gray-200', 'cursor-not-allowed');
+          document.getElementById('email').classList.add('bg-gray-200', 'cursor-not-allowed');
+        }
+      } catch (error) {
+        console.error('Lỗi khi lấy dữ liệu người dùng:', error);
+      }
+    }
+
+    async function fetchDepartments() {
+      try {
+        const response = await fetch('/api/v1/departments/all');
+        const result = await response.json();
+
+        console.log("📌 Dữ liệu departments:", result); // Kiểm tra dữ liệu trả về
+
+        if (Array.isArray(result.data)) {
+          const departments = [...new Set(result.data.map(item => item.departmentName))]; // Loại bỏ trùng lặp
+          populateDepartmentDropdown(departments);
+        } else {
+          console.error("❌ API departments không trả về danh sách hợp lệ:", result);
+        }
+      } catch (error) {
+        console.error('🚨 Lỗi khi lấy danh sách đơn vị:', error);
+      }
+    }
+
+    function populateDepartmentDropdown(departments) {
+      const departmentSelect = document.getElementById('department');
+      departmentSelect.innerHTML = '<option value="">Chọn đơn vị</option>';
+      departments.forEach(dept => {
+        const option = document.createElement('option');
+        option.value = dept;
+        option.textContent = dept;
+        departmentSelect.appendChild(option);
+      });
+    }
+
+
+    async function fetchRoles() {
+      try {
+        const response = await fetch('/api/v1/roles/all');
+        const result = await response.json();
+        const rolesString = result.retMsg;
+        const roles = rolesString.match(/Role\(roleId=\d+, roleName=(\w+)\)/g).map(role => {
+          const roleName = role.match(/roleName=(\w+)/)[1];
+          return { roleName };
+        });
+
+        const roleSelect = document.getElementById('role');
+        roleSelect.innerHTML = '<option>Chọn quyền</option>';
+        roles.forEach(role => {
+          const option = document.createElement('option');
+          option.value = role.roleName;
+          option.textContent = role.roleName;
+          roleSelect.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Lỗi khi lấy danh sách quyền:', error);
+      }
+    }
+
+    async function updateAccount() {
+      const username = document.getElementById('username').value;
+      const userData = {
+        username,
+        employeeName: document.getElementById('employee_name').value,
+        email: document.getElementById('email').value,
+        departmentId: document.getElementById('department').value,
+        role_name: document.getElementById('role').value,
+        status: document.getElementById('active').checked ? 'Active' : 'Inactive'
+      };
+
+      try {
+        const response = await fetch(`/api/v1/users/update/${username}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userData)
+        });
+        const result = await response.json();
+        alert(result.message);
+      } catch (error) {
+        console.error('Lỗi khi cập nhật tài khoản:', error);
+        alert('Có lỗi xảy ra. Vui lòng thử lại sau!');
+      }
+    }
+
+    async function changePassword() {
+      const username = document.getElementById('username').value;
+      const newPassword = document.getElementById('newPassword').value;
+
+      try {
+        const response = await fetch(`/api/v1/users/change-password/${username}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newPassword })
+        });
+
+        const result = await response.json();
+        if (result.status === 'SUCCESS') {
+          showNotification(result.message);
+          window.location.href = "/users";
+        } else {
+          showNotification(result.message || 'Có lỗi xảy ra. Vui lòng thử lại sau!');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showNotification('Có lỗi xảy ra. Vui lòng thử lại sau!');
+      }
+    }
+
+    function resetPassword() {
+      document.getElementById('resetPasswordModal').classList.remove('hidden');
+    }
+
+    function closePasswordModal() {
+      document.getElementById('resetPasswordModal').classList.add('hidden');
+    }
+
+    window.onload = async function() {
+      const urlParts = window.location.pathname.split('/');
+      const username = urlParts[urlParts.length - 1];
+
+      await fetchDepartments();
+      await fetchRoles();
+
+      if (username) {
+        fetchUserData(username);
+      }
+      document.querySelector('button.bg-blue-500').addEventListener('click', updateAccount);
+      document.querySelector('button.bg-red-500').addEventListener('click', resetPassword);
+    };
+  </script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<div class="bg-white p-8 rounded-2xl shadow-md w-96">
+  <h2 class="text-xl font-bold mb-4 text-center">Cập nhật tài khoản</h2>
+  <form>
+    <div class="mb-4">
+      <label>Username:</label>
+      <input id="username" type="text" class="border border-gray-300 rounded-md p-2 w-full bg-gray-200" readonly>
+    </div>
+    <div class="mb-4">
+      <label>Tên nhân viên:</label>
+      <input id="employee_name" type="text" class="border border-gray-300 rounded-md p-2 w-full">
+    </div>
+    <div class="mb-4">
+      <label>Email:</label>
+      <input id="email" type="email" class="border border-gray-300 rounded-md p-2 w-full bg-gray-200" readonly>
+    </div>
+    <div class="mb-4">
+      <label>Đơn vị:</label>
+      <select id="department" class="border border-gray-300 rounded-md p-2 w-full"></select>
+    </div>
+    <div class="mb-4">
+      <label>Quyền:</label>
+      <select id="role" class="border border-gray-300 rounded-md p-2 w-full"></select>
+    </div>
+    <div class="mb-4 flex items-center">
+      <input type="checkbox" id="active" class="mr-2">
+      <label>Tình trạng</label>
+    </div>
+    <div class="flex justify-between mt-4">
+      <button type="button" class="bg-blue-500 text-white px-4 py-2 rounded-md">Lưu</button>
+      <button type="button" class="bg-red-500 text-white px-4 py-2 rounded-md">Hủy</button>
+      <button type="button" onclick="resetPassword();" class="bg-yellow-500 text-white px-4 py-2 rounded-md">Đặt lại mật khẩu</button>
+    </div>
+  </form>
+</div>
+
+<!-- Mật khẩu mới -->
+<div id="resetPasswordModal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-80">
+    <h2 class="text-xl font-bold mb-4">Đặt lại mật khẩu</h2>
+    <input type="password" id="newPassword" placeholder="Mật khẩu mới" class="border border-gray-300 rounded-md p-2 w-full mb-4">
+    <div class="flex justify-end">
+      <button class="bg-blue-500 text-white px-4 py-2 rounded-md mr-2" onclick="closePasswordModal()">Đặt lại mật khẩu</button>
+      <button class="bg-gray-500 text-white px-4 py-2 rounded-md" onclick="closePasswordModal()">Hủy</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
